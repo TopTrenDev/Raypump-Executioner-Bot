@@ -31,7 +31,7 @@ impl Blacklist {
     }
 
     // Check if an address is in the blacklist
-    pub fn is_blacklisted(&self, address: &str) -> bool {
-        self.addresses.contains(&address.to_string())
+    pub fn is_blacklisted(&self, address: String) -> bool {
+        self.addresses.contains(&address)
     }
 }

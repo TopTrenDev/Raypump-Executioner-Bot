@@ -11,6 +11,7 @@ use crate::{
     },
     dex::pump_fun::PUMP_PROGRAM,
 };
+use anyhow::Result;
 use futures_util::SinkExt;
 use serde_json::Value;
 use spl_token::ui_amount_to_amount;
@@ -20,6 +21,113 @@ use super::swap::{SwapDirection, SwapInType};
 use chrono::Utc;
 use futures_util::stream::StreamExt;
 use tokio::time::Instant;
+
+#[derive(Clone)]
+pub struct TradeInfoFromToken {
+    pub slot: u64,
+    pub signature: String,
+    pub target: String,
+    pub mint: String,
+    pub bonding_curve: String,
+    pub bonding_curve_index: usize,
+    pub sol_post_amount: u64,
+    pub sol_pre_amount: u64,
+}
+
+impl TradeInfoFromToken {
+    pub fn new(
+        &self,
+        slot: u64,
+        signature: String,
+        target: String,
+        mint: String,
+        bonding_curve: String,
+        bonding_curve_index: usize,
+        sol_post_amount: u64,
+        sol_pre_amount: u64,
+    ) -> Self {
+        Self {
+            slot,
+            signature,
+            target,
+            mint,
+            bonding_curve,
+            bonding_curve_index,
+            sol_post_amount,
+            sol_pre_amount,
+        }
+    }
+
+    pub fn from_json(json: Value) -> Result<Self> {
+        let slot = json["params"]["result"]["slot"].as_u64().unwrap();
+        let signature = json["params"]["result"]["signature"].clone().to_string();
+        let mut target = String::new();
+        let mut mint = String::new();
+        let mut bonding_curve = String::new();
+        let mut bonding_curve_index = 0;
+        let mut sol_post_amount = 0_u64;
+        let mut sol_pre_amount = 0_u64;
+
+        // Retrieve Target Wallet Pubkey
+        let account_keys = json["params"]["result"]["transaction"]["transaction"]["message"]
+            ["accountKeys"]
+            .as_array()
+            .expect("Failed to get account keys");
+        if let Some(account_key) = account_keys
+            .iter()
+            .find(|account_key| account_key["signer"].as_bool().unwrap())
+        {
+            target = account_key["pubkey"].as_str().unwrap().to_string();
+        }
+
+        if let Some(post_token_balances) =
+            json["params"]["result"]["transaction"]["meta"]["postTokenBalances"].as_array()
+        {
+            for post_token_balance in post_token_balances.iter() {
+                let owner = post_token_balance["owner"].as_str().unwrap();
+
+                if owner != target {
+                    bonding_curve = owner.to_string();
+                }
+
+                if owner == target || owner == bonding_curve {
+                    mint = post_token_balance["mint"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+        }
+
+        if let Some(index) = account_keys
+            .iter()
+            .position(|account_key| account_key["pubkey"].as_str().unwrap() == bonding_curve)
+        {
+            bonding_curve_index = index
+        }
+
+        if let Some(post_balances) =
+            json["params"]["result"]["transaction"]["meta"]["postBalances"].as_array()
+        {
+            sol_post_amount = post_balances[bonding_curve_index].as_u64().unwrap();
+        }
+        if let Some(pre_balances) =
+            json["params"]["result"]["transaction"]["meta"]["preBalances"].as_array()
+        {
+            sol_pre_amount = pre_balances[bonding_curve_index].as_u64().unwrap();
+        }
+        Ok(Self {
+            slot,
+            signature,
+            target,
+            mint,
+            bonding_curve,
+            bonding_curve_index,
+            sol_post_amount,
+            sol_pre_amount,
+        })
+    }
+}
 
 pub async fn pumpfun_autosell_monitor(
     existing_liquidity_pools: Arc<Mutex<HashSet<LiquidityPool>>>,
@@ -210,63 +318,14 @@ pub async fn new_token_trader_pumpfun(
                 // Check if this is mint tx
                 let mut mint_flag = false; //mint_tx?true:false;
                 let mut _skip_flag = false; //_skip_flag?true:false;
-                let _slot = json["params"]["result"]["slot"].as_number().unwrap();
-                let signature = json["params"]["result"]["signature"].clone().to_string();
-                let mut target = "";
-                let mut mint = "".to_string();
-                let mut bonding_curve = "".to_string();
-                let mut bonding_curve_index = 0;
-                let mut sol_post_amount = 0_u64;
-                let mut sol_pre_amount = 0_u64;
-
-                // Retrieve Target Wallet Pubkey
-                let account_keys = json["params"]["result"]["transaction"]["transaction"]
-                    ["message"]["accountKeys"]
-                    .as_array()
-                    .expect("Failed to get account keys");
-                if let Some(account_key) = account_keys
-                    .iter()
-                    .find(|account_key| account_key["signer"].as_bool().unwrap())
-                {
-                    target = account_key["pubkey"].as_str().unwrap();
-                }
-
-                if let Some(post_token_balances) =
-                    json["params"]["result"]["transaction"]["meta"]["postTokenBalances"].as_array()
-                {
-                    for post_token_balance in post_token_balances.iter() {
-                        let owner = post_token_balance["owner"].as_str().unwrap();
-
-                        if owner != target {
-                            bonding_curve = owner.to_string();
-                        }
-
-                        if owner == target || owner == bonding_curve {
-                            mint = post_token_balance["mint"]
-                                .as_str()
-                                .unwrap_or("")
-                                .to_string();
-                        }
+                let trade_info = match TradeInfoFromToken::from_json(json.clone()) {
+                    Ok(info) => info,
+                    Err(e) => {
+                        logger.log(format!("Error in parsing txn: {}", e));
+                        continue;
                     }
-                }
+                };
 
-                if let Some(index) = account_keys.iter().position(|account_key| {
-                    account_key["pubkey"].as_str().unwrap() == bonding_curve
-                }) {
-                    bonding_curve_index = index
-                }
-
-                if let Some(post_balances) =
-                    json["params"]["result"]["transaction"]["meta"]["postBalances"].as_array()
-                {
-                    sol_post_amount = post_balances[bonding_curve_index].as_u64().unwrap();
-                }
-                if let Some(pre_balances) =
-                    json["params"]["result"]["transaction"]["meta"]["preBalances"].as_array()
-                {
-                    sol_pre_amount = pre_balances[bonding_curve_index].as_u64().unwrap();
-                }
-                // logger.log(format!("{}:{}:{}:{}:{}:{}", target, mint, bonding_curve, bonding_curve_index, sol_post_amount, sol_pre_amount));
                 for log_message in log_messages.iter() {
                     if let Some(log_msg) = log_message.as_str() {
                         // Mint tx log
@@ -275,7 +334,7 @@ pub async fn new_token_trader_pumpfun(
 
                             // Add existing liquidity pools
                             let new_pool = LiquidityPool {
-                                mint: mint.to_string(),
+                                mint: trade_info.clone().mint,
                                 in_amount: 0,
                                 out_amount: 0,
                                 status: Status::New,
@@ -312,15 +371,17 @@ pub async fn new_token_trader_pumpfun(
                     // If this is not mint tx, then check if it is existing in existing_liquidity_pool
                     // Check if mint is existing in existing_liquidity_pool
                     let mut existing_pools = existing_liquidity_pools.lock().unwrap();
-                    if let Some(existing_pool) =
-                        existing_pools.clone().iter().find(|pool| pool.mint == mint)
+                    if let Some(existing_pool) = existing_pools
+                        .clone()
+                        .iter()
+                        .find(|pool| pool.mint == trade_info.clone().mint)
                     {
                         if existing_pool.status == Status::New {
                             // if counter > 8 {
                             //     continue;
                             // }
                             // Check Blacklist
-                            if blacklist.is_blacklisted(target) {
+                            if blacklist.is_blacklisted(trade_info.clone().target) {
                                 let failed_pool = LiquidityPool {
                                     mint: existing_pool.clone().mint,
                                     in_amount: existing_pool.in_amount,
@@ -333,16 +394,18 @@ pub async fn new_token_trader_pumpfun(
                                 existing_pools.insert(failed_pool.clone());
                                 logger.log(format!(
                                     "Notification: {} bought this token, then we don't buy!",
-                                    target
+                                    trade_info.clone().target
                                 ));
                                 continue;
                             }
 
                             // Check Buy Condition
                             let mut buy_amount = 0_u64;
-                            let check_pool = if sol_pre_amount < sol_post_amount {
+                            let check_pool = if trade_info.sol_pre_amount
+                                < trade_info.sol_post_amount
+                            {
                                 // buy
-                                buy_amount = sol_post_amount - sol_pre_amount;
+                                buy_amount = trade_info.sol_post_amount - trade_info.sol_pre_amount;
                                 LiquidityPool {
                                     mint: existing_pool.clone().mint,
                                     in_amount: existing_pool.in_amount + buy_amount as u128,
@@ -352,7 +415,8 @@ pub async fn new_token_trader_pumpfun(
                                 }
                             } else {
                                 // sell
-                                let sell_amount = sol_pre_amount - sol_post_amount;
+                                let sell_amount =
+                                    trade_info.sol_pre_amount - trade_info.sol_post_amount;
                                 LiquidityPool {
                                     mint: existing_pool.clone().mint,
                                     in_amount: existing_pool.in_amount,
@@ -383,7 +447,7 @@ pub async fn new_token_trader_pumpfun(
                                 // Now Buy!
                                 logger.log(format!(
                                     "[Buy Pool]({}): Reached at buying condition, Buying at {}({}) ({:?}).",
-                                    signature.clone(),
+                                    trade_info.signature,
                                     Utc::now(),
                                     Utc::now().timestamp(),
                                     start_time.elapsed()
@@ -479,27 +543,30 @@ pub async fn new_token_trader_pumpfun(
                         } else if existing_pool.status == Status::Bought {
                             // Check Sell Condition
                             let mut sell_amount = 0_u64;
-                            let check_pool = if sol_pre_amount < sol_post_amount {
-                                // buy
-                                let buy_amount = sol_post_amount - sol_pre_amount;
-                                LiquidityPool {
-                                    mint: existing_pool.clone().mint,
-                                    in_amount: existing_pool.in_amount + buy_amount as u128,
-                                    out_amount: existing_pool.out_amount,
-                                    status: existing_pool.clone().status,
-                                    timestamp: existing_pool.timestamp,
-                                }
-                            } else {
-                                // sell
-                                sell_amount = sol_pre_amount - sol_post_amount;
-                                LiquidityPool {
-                                    mint: existing_pool.clone().mint,
-                                    in_amount: existing_pool.in_amount,
-                                    out_amount: existing_pool.out_amount + sell_amount as u128,
-                                    status: existing_pool.clone().status,
-                                    timestamp: existing_pool.timestamp,
-                                }
-                            };
+                            let check_pool =
+                                if trade_info.sol_pre_amount < trade_info.sol_post_amount {
+                                    // buy
+                                    let buy_amount =
+                                        trade_info.sol_post_amount - trade_info.sol_pre_amount;
+                                    LiquidityPool {
+                                        mint: existing_pool.clone().mint,
+                                        in_amount: existing_pool.in_amount + buy_amount as u128,
+                                        out_amount: existing_pool.out_amount,
+                                        status: existing_pool.clone().status,
+                                        timestamp: existing_pool.timestamp,
+                                    }
+                                } else {
+                                    // sell
+                                    sell_amount =
+                                        trade_info.sol_pre_amount - trade_info.sol_post_amount;
+                                    LiquidityPool {
+                                        mint: existing_pool.clone().mint,
+                                        in_amount: existing_pool.in_amount,
+                                        out_amount: existing_pool.out_amount + sell_amount as u128,
+                                        status: existing_pool.clone().status,
+                                        timestamp: existing_pool.timestamp,
+                                    }
+                                };
                             existing_pools.retain(|pool| pool.mint != existing_pool.clone().mint);
                             existing_pools.insert(check_pool.clone());
                             // logger.log(format!(
@@ -526,7 +593,7 @@ pub async fn new_token_trader_pumpfun(
                                 // Now Sell!
                                 logger.log(format!(
                                     "[Sell Pool]({}): Reached at selling condition, Selling at {} ({:?}).",
-                                    signature.clone(),
+                                    trade_info.signature,
                                     Utc::now(),
                                     start_time.elapsed()
                                 ));
@@ -639,35 +706,35 @@ pub async fn new_token_trader_pumpfun(
                     // if counter > 8 {
                     //     continue;
                     // }
-                    if sol_post_amount < sol_pre_amount {
+                    if trade_info.sol_post_amount < trade_info.sol_pre_amount {
                         continue;
                     }
-                    let buy_amount = sol_post_amount - sol_pre_amount;
+                    let buy_amount = trade_info.sol_post_amount - trade_info.sol_pre_amount;
                     if buy_amount > buy_thredshold {
                         // Now Buy!
                         logger.log(format!(
                             "[Buy Pool]({}): \n Reached at buying condition, Buying at {} ({:?}).",
-                            signature.clone(),
+                            trade_info.signature,
                             Utc::now(),
                             start_time.elapsed(),
                         ));
 
                         // Update status into ING status..
                         let buying_pool = LiquidityPool {
-                            mint: mint.clone(),
+                            mint: trade_info.clone().mint,
                             in_amount: buy_amount as u128,
                             out_amount: 0_u128,
                             status: Status::Buying,
                             timestamp: Some(Instant::now()),
                         };
                         let mut existing_pools = existing_liquidity_pools.lock().unwrap();
-                        existing_pools.retain(|pool| pool.mint != mint.clone());
+                        existing_pools.retain(|pool| pool.mint != trade_info.clone().mint);
                         existing_pools.insert(buying_pool.clone());
 
                         // counter += 1;
                         // Buy through the thread
                         let swapx_clone = swapx.clone();
-                        let mint_clone = mint.clone();
+                        let mint_clone = trade_info.clone().mint;
                         let swap_config_clone = swap_config.clone();
                         let logger_clone = logger.clone();
                         let existing_liquidity_pools_clone = Arc::clone(&existing_liquidity_pools);
@@ -727,14 +794,14 @@ pub async fn new_token_trader_pumpfun(
                         //     start_time.elapsed(),
                         // ));
                         let initial_pool = LiquidityPool {
-                            mint: mint.clone(),
+                            mint: trade_info.clone().mint,
                             in_amount: buy_amount as u128,
                             out_amount: 0_u128,
                             status: Status::New,
                             timestamp: Some(Instant::now()),
                         };
                         let mut existing_pools = existing_liquidity_pools.lock().unwrap();
-                        existing_pools.retain(|pool| pool.mint != mint.clone());
+                        existing_pools.retain(|pool| pool.mint != trade_info.clone().mint.clone());
                         existing_pools.insert(initial_pool.clone());
                         // logger.log(format!("[Initial Result]: \n {:#?}", initial_pool));
                     }
