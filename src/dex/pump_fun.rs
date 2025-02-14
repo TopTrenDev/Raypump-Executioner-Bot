@@ -98,11 +98,11 @@ impl Pump {
             &token_out,
             &owner,
         );
-        
+
         let mut create_instruction = None;
         let mut close_instruction = None;
 
-        let (amount_specified, amount_ui_pretty) = match swap_config.swap_direction {
+        let (amount_specified, _amount_ui_pretty) = match swap_config.swap_direction {
             SwapDirection::Buy => {
                 // Create base ATA if it doesn't exist.
                 match token::get_account_info(
@@ -186,9 +186,9 @@ impl Pump {
 
         // logger.log(format!(
         //     "swap: {}, value: {:?} -> {}",
-        //     token_in, amount_ui_pretty, token_out
+        //     token_in, _, token_out
         // ));
-        
+
         let client = self
             .rpc_client
             .clone()
@@ -197,9 +197,6 @@ impl Pump {
         // Calculate tokens out
         let virtual_sol_reserves = U128::from(bonding_curve_account.virtual_sol_reserves);
         let virtual_token_reserves = U128::from(bonding_curve_account.virtual_token_reserves);
-        let unit_price = (bonding_curve_account.virtual_sol_reserves as f64
-            / bonding_curve_account.virtual_token_reserves as f64)
-            / 1000.0;
 
         let (token_amount, sol_amount_threshold, input_accouts) = match swap_config.swap_direction {
             SwapDirection::Buy => {
@@ -263,10 +260,10 @@ impl Pump {
         };
 
         // logger.log(format!(
-            //     "token_amount: {}, sol_amount_threshold: {}, unit_price: {} sol",
-            //     token_amount, sol_amount_threshold, unit_price
-            // ));
-            
+        //     "token_amount: {}, sol_amount_threshold: {}, unit_price: {} sol",
+        //     token_amount, sol_amount_threshold, unit_price
+        // ));
+
         let build_swap_instruction = Instruction::new_with_bincode(
             pump_program,
             &(pump_method, token_amount, sol_amount_threshold),
@@ -291,7 +288,13 @@ impl Pump {
         if instructions.is_empty() {
             return Err(anyhow!("instructions is empty, no tx required"));
         }
-        logger.log(format!("Sending tx({}): {}::{} :: {:?}", mint_str, Utc::now(), Utc::now().timestamp(), start_time.elapsed()));
+        logger.log(format!(
+            "Sending tx({}): {}::{} :: {:?}",
+            mint_str,
+            Utc::now(),
+            Utc::now().timestamp(),
+            start_time.elapsed()
+        ));
         tx::new_signed_and_send(
             &client,
             &self.keypair,

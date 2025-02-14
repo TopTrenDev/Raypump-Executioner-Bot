@@ -145,7 +145,7 @@ pub async fn new_signed_and_send(
     let mut txs = vec![];
     if use_jito {
         let (tip_account, tip1_account) = get_tip_account()?;
-        
+
         // jito tip, the upper limit is 0.1
         let mut tip_value = get_tip_value().await?;
         let tip = 0.0004_f64;
