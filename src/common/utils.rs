@@ -1,8 +1,13 @@
-use crate::engine::swap::{SwapDirection, SwapInType};
+use crate::{
+    dex::pump_fun::PUMP_PROGRAM,
+    engine::swap::{SwapDirection, SwapInType},
+};
 use anyhow::Result;
 use bs58;
+use lazy_static::lazy_static;
 use reqwest::Error;
 use serde::Deserialize;
+use serde_json::{json, Value};
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
 use std::{env, sync::Arc};
 
@@ -10,6 +15,27 @@ pub const LOG_INSTRUCTION: &str = "initialize2";
 pub const PUMP_LOG_INSTRUCTION: &str = "MintTo";
 pub const HELIUS_PROXY: &str =
     "HuuaCvCTvpEFT9DfMynCNM4CppCRU6r5oikziF8ZpzMm2Au2eoTjkWgTnQq6TBb6Jpt";
+
+lazy_static! {
+    pub static ref SUBSCRIPTION_MSG: Value = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "transactionSubscribe",
+        "params": [
+            {
+                "failed": false,
+                "accountInclude": [PUMP_PROGRAM],
+                "accountExclude": [],
+            },
+            {
+                "commitment": "processed",
+                "encoding": "jsonParsed",
+                "transactionDetails": "full",
+                "maxSupportedTransactionVersion": 0
+            }
+        ]
+    });
+}
 
 #[derive(Deserialize)]
 struct CoinGeckoResponse {
@@ -108,7 +134,6 @@ pub struct LiquidityPool {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Status {
-    New,
     Bought,
     Buying,
     Sold,

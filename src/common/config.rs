@@ -1,7 +1,6 @@
 use dotenv::dotenv;
 use solana_sdk::signer::Signer;
 
-use crate::common::blacklist::Blacklist;
 use crate::common::constants::INIT_MSG;
 use crate::common::logger::Logger;
 use crate::common::utils::{
@@ -14,7 +13,6 @@ pub struct Config {
     pub rpc_wss: String,
     pub app_state: AppState,
     pub swap_config: SwapConfig,
-    pub blacklist: Blacklist,
     pub time_exceed: u64,
     pub solana_price: f64,
 }
@@ -64,10 +62,6 @@ impl Config {
             wallet,
         };
 
-        let blacklist = match Blacklist::new("blacklist.txt") {
-            Ok(blacklist) => blacklist,
-            Err(_) => Blacklist::empty(),
-        };
         let time_exceed: u64 = import_env_var("TIME_EXCEED")
             .parse()
             .expect("Failed to parse string into u64");
@@ -76,8 +70,7 @@ impl Config {
             "Sniper Environment: \n\t\t\t\t [Web Socket RPC]: {},
             \n\t\t\t\t [Wallet]: {:?}, [Balance]: {} Sol, 
             \n\t\t\t\t [Slippage]: {}, [Solana]: {},
-            \n\t\t\t\t [Time Exceed]: {}, [Amount]: {},
-            \n\t\t\t\t [Blacklist]: {} \n",
+            \n\t\t\t\t [Time Exceed]: {}, [Amount]: {}\n",
             rpc_wss,
             wallet_cloned.pubkey(),
             balance as f64 / 1_000_000_000_f64,
@@ -85,14 +78,12 @@ impl Config {
             solana_price,
             time_exceed,
             amount_in,
-            blacklist.clone().length(),
         ));
 
         Config {
             rpc_wss,
             app_state,
             swap_config,
-            blacklist,
             time_exceed,
             solana_price,
         }

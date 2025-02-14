@@ -3733,6 +3733,7 @@ dependencies = [
  "futures-util",
  "indicatif",
  "jito-block-engine-json-rpc-client",
+ "lazy_static",
  "rand 0.8.5",
  "raydium_amm",
  "reqwest",

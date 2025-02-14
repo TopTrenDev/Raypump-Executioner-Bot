@@ -16,7 +16,6 @@ async fn main() {
         &config.rpc_wss,
         config.app_state,
         config.swap_config,
-        config.blacklist,
         config.time_exceed,
         config.solana_price,
     )
