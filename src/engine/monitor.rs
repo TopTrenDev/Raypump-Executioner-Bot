@@ -210,7 +210,7 @@ pub async fn new_token_trader_pumpfun(
                 // Check if this is mint tx
                 let mut mint_flag = false; //mint_tx?true:false;
                 let mut _skip_flag = false; //_skip_flag?true:false;
-                let slot = json["params"]["result"]["slot"].as_number().unwrap();
+                let _slot = json["params"]["result"]["slot"].as_number().unwrap();
                 let signature = json["params"]["result"]["signature"].clone().to_string();
                 let mut target = "";
                 let mut mint = "".to_string();
@@ -291,7 +291,7 @@ pub async fn new_token_trader_pumpfun(
                             //     Utc::now(),
                             //     start_time.elapsed()
                             // ));
-                            // mint_flag = true;
+                            mint_flag = true;
                             // logger.log(format!(
                             //     "[New Pool Detail]: {:?}, {}, {}, {:?}, {:?}",
                             //     new_pool.mint,
