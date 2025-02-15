@@ -17,7 +17,8 @@ async fn main() {
         config.app_state,
         config.swap_config,
         config.time_exceed,
-        config.solana_price,
+        config.take_profit,
+        config.stop_loss,
     )
     .await;
 }

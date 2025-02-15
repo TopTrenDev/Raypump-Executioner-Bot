@@ -1,4 +1,5 @@
 use chrono::Local;
+use colored::*;
 
 const LOG_LEVEL: &str = "LOG";
 
@@ -42,7 +43,7 @@ impl Logger {
         let date = Local::now();
         format!(
             "[{}] {}",
-            date.format(self.date_format.as_str()),
+            date.format(&self.date_format.as_str().blue().bold()),
             self.prefix
         )
     }

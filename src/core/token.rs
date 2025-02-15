@@ -34,7 +34,7 @@ pub async fn get_account_info(
     client: Arc<solana_client::nonblocking::rpc_client::RpcClient>,
     address: &Pubkey,
     account: &Pubkey,
-    logger: &Logger,
+    _logger: &Logger,
 ) -> TokenResult<StateWithExtensionsOwned<Account>> {
     let program_client = Arc::new(ProgramRpcClient::new(
         client.clone(),
@@ -45,11 +45,11 @@ pub async fn get_account_info(
         .await
         .map_err(TokenError::Client)?
         .ok_or(TokenError::AccountNotFound)
-        .inspect_err(|err| {
-            logger.log(format!(
-                "get_account_info: {} {}: mint {}",
-                account, err, address
-            ));
+        .inspect_err(|_err| {
+            // logger.log(format!(
+            //     "get_account_info: {} {}: mint {}",
+            //     account, err, address
+            // ));
         })?;
 
     if account.owner != spl_token::ID {
