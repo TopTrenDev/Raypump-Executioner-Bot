@@ -512,18 +512,6 @@ pub async fn new_token_trader_pumpfun(
                             // Check `volume_change`
                             // --------------------
                             if trade_info.volume_change == 0 {
-                                let bought_pool = LiquidityPool {
-                                    mint: existing_pool.clone().mint,
-                                    volume: existing_pool.volume,
-                                    buy_price: existing_pool.buy_price,
-                                    sell_price: existing_pool.sell_price,
-                                    txn_num: existing_pool.txn_num + 1_u64,
-                                    status: Status::Bought,
-                                    timestamp: existing_pool.timestamp,
-                                };
-                                existing_pools
-                                    .retain(|pool| pool.mint != existing_pool.clone().mint);
-                                existing_pools.insert(bought_pool.clone());
                                 continue;
                             }
                             // Update into ...ing status
