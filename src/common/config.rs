@@ -134,13 +134,26 @@ lazy_static! {
     });
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+use std::cmp::Eq;
+use std::hash::{Hash, Hasher};
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct LiquidityPool {
     pub mint: String,
-    pub buy_price: u64,
-    pub sell_price: u64,
+    pub buy_price: f64,
+    pub sell_price: f64,
     pub status: Status,
     pub timestamp: Option<tokio::time::Instant>,
+}
+
+impl Eq for LiquidityPool {}
+impl Hash for LiquidityPool {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.mint.hash(state);
+        self.buy_price.to_bits().hash(state); // Convert f64 to bits for hashing
+        self.sell_price.to_bits().hash(state);
+        self.status.hash(state);
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

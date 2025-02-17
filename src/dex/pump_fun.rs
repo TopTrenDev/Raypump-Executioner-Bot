@@ -65,11 +65,11 @@ impl Pump {
         mint_str: &str,
         swap_config: SwapConfig,
         start_time: Instant,
-    ) -> Result<(Arc<RpcClient>, Arc<Keypair>, Vec<Instruction>, u64)> {
+    ) -> Result<(Arc<RpcClient>, Arc<Keypair>, Vec<Instruction>, f64)> {
         let logger = Logger::new("[PUMPFUN-SWAP-BY-MINT] => ".blue().to_string());
         logger.log(
             format!(
-                "[SWAP-BEGIN]({}) - {} :: ({:?})",
+                "[SWAP-BEGIN]({}) - {} :: {:?}",
                 mint_str,
                 chrono::Utc::now(),
                 start_time.elapsed()
@@ -199,6 +199,18 @@ impl Pump {
             }
         };
 
+        let token_price: f64 =
+            (virtual_sol_reserves.as_u128() as f64) / (virtual_token_reserves.as_u128() as f64);
+
+        logger.log(format!(
+            "[TP/SL]({}) => v_sol_reserve: {} :: v_token_reserve: {}",
+            mint_str, virtual_sol_reserves, virtual_token_reserves
+        ));
+        logger.log(format!(
+            "[TOKEN_PRICE]({}) => token_price: {} :: amount_specified: {}",
+            mint_str, token_price, amount_specified
+        ));
+
         let (token_amount, sol_amount_threshold, input_accouts) = match swap_config.swap_direction {
             SwapDirection::Buy => {
                 let max_sol_cost = max_amount_with_slippage(amount_specified, slippage_bps);
@@ -285,7 +297,7 @@ impl Pump {
         }
         logger.log(
             format!(
-                "[SENDING-TXN]({}) - {} :: ({:?})",
+                "[BUILD-TXN]({}) - {} :: ({:?})",
                 mint_str,
                 Utc::now(),
                 start_time.elapsed()
@@ -310,14 +322,9 @@ impl Pump {
             .clone()
             .context("Failed to get rpc client")?;
 
-        // Return- (instructions, sol_amount_threshold)
+        // Return- (instructions, token_price)
         // --------------------
-        Ok((
-            client,
-            self.keypair.clone(),
-            instructions,
-            sol_amount_threshold,
-        ))
+        Ok((client, self.keypair.clone(), instructions, token_price))
     }
 }
 
@@ -372,14 +379,25 @@ pub async fn get_bonding_curve_account(
 ) -> Result<(Pubkey, Pubkey, BondingCurveAccount)> {
     let bonding_curve = get_pda(mint, program_id)?;
     let associated_bonding_curve = get_associated_token_address(&bonding_curve, mint);
-    let bonding_curve_data = rpc_client
-        .get_account_data(&bonding_curve)
-        .inspect_err(|err| {
-            println!(
-                "Failed to get bonding curve account data: {}, err: {}",
-                bonding_curve, err
-            );
-        })?;
+    
+    let max_retries = 3;
+    let mut retry_count = 0;
+    let bonding_curve_data = loop {
+        match rpc_client
+            .get_account_data(&bonding_curve) {
+                Ok(data) => break data,
+                Err(err) => {
+                    retry_count += 1;
+                    if retry_count > max_retries {
+                        println!(
+                            "Failed to get bonding curve account data: {}, err: {}",
+                            bonding_curve, err
+                        );
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        };
 
     let bonding_curve_account =
         from_slice::<BondingCurveAccount>(&bonding_curve_data).map_err(|e| {
