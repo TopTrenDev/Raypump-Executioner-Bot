@@ -26,7 +26,7 @@ pub struct TradeInfoFromToken {
     pub mint: String,
     pub bonding_curve: String,
     pub bonding_curve_index: usize,
-    pub volume_change: u64,
+    pub volume_change: i64,
 }
 
 impl TradeInfoFromToken {
@@ -38,7 +38,7 @@ impl TradeInfoFromToken {
         mint: String,
         bonding_curve: String,
         bonding_curve_index: usize,
-        volume_change: u64,
+        volume_change: i64,
     ) -> Self {
         Self {
             slot,
@@ -106,7 +106,7 @@ impl TradeInfoFromToken {
             .and_then(|pre_balance| pre_balance.as_u64())
             .unwrap_or(0_u64);
 
-        let volume_change = sol_post_amount.abs_diff(sol_pre_amount);
+        let volume_change = (sol_post_amount - sol_pre_amount) as i64;
 
         Ok(Self {
             slot,
@@ -137,6 +137,7 @@ pub async fn pumpfun_autosell_monitor(
         let start_time = Instant::now();
         if existing_pool.status == Status::Bought {
             if let Some(timestamp) = existing_pool.timestamp {
+                logger.log(format!("[TIMESTAMP-CHECK]({}) => {:?} :: {:?}", existing_pool.mint, timestamp.elapsed(), timeout));
                 if timestamp.elapsed() > timeout {
                     // Now Auto-Sell
                     // -------------
@@ -165,10 +166,8 @@ pub async fn pumpfun_autosell_monitor(
                     // Update status into ING status..
                     let selling_pool = LiquidityPool {
                         mint: existing_pool.clone().mint,
-                        volume: existing_pool.volume,
                         buy_price: existing_pool.buy_price,
                         sell_price: existing_pool.sell_price,
-                        txn_num: existing_pool.txn_num,
                         status: Status::Selling,
                         timestamp: Some(Instant::now()),
                     };
@@ -204,10 +203,8 @@ pub async fn pumpfun_autosell_monitor(
                                     Ok(res) => {
                                         let sold_pool = LiquidityPool {
                                             mint: mint_str.clone(),
-                                            volume: existing_pool_clone.volume,
                                             buy_price: existing_pool_clone.buy_price,
                                             sell_price: sol_amount,
-                                            txn_num: existing_pool_clone.txn_num,
                                             status: Status::Sold,
                                             timestamp: Some(Instant::now()),
                                         };
@@ -232,10 +229,8 @@ pub async fn pumpfun_autosell_monitor(
                                         );
                                         let bought_pool = LiquidityPool {
                                             mint: mint_str.clone(),
-                                            volume: existing_pool_clone.volume,
                                             buy_price: existing_pool_clone.buy_price,
                                             sell_price: existing_pool_clone.sell_price,
-                                            txn_num: existing_pool_clone.txn_num,
                                             status: Status::Bought,
                                             timestamp: None,
                                         };
@@ -254,10 +249,8 @@ pub async fn pumpfun_autosell_monitor(
                                 );
                                 let bought_pool = LiquidityPool {
                                     mint: mint_str.clone(),
-                                    volume: existing_pool_clone.volume,
                                     buy_price: existing_pool_clone.buy_price,
                                     sell_price: existing_pool_clone.sell_price,
-                                    txn_num: existing_pool_clone.txn_num,
                                     status: Status::Bought,
                                     timestamp: None,
                                 };
@@ -316,9 +309,6 @@ pub async fn new_token_trader_pumpfun(
         if let WsMessage::Text(text) = msg {
             let start_time = Instant::now();
             let json: Value = serde_json::from_str(&text).unwrap();
-            if counter > 5 {
-                continue;
-            };
             // logger.log(format!("{:#?}", json));
             pumpfun_autosell_monitor(
                 Arc::clone(&existing_liquidity_pools),
@@ -375,17 +365,13 @@ pub async fn new_token_trader_pumpfun(
                     // NOW BUY!
                     // Update into ...ing status
                     // ---------------
-                    let initial_volume = 0_u64;
-                    let volume_change = trade_info.clone().volume_change;
-                    let initial_txn_num = 0_u64;
-                    let txn_num_change = 1_u64;
-
+                    if counter > 5 {
+                        continue;
+                    };
                     let buying_pool = LiquidityPool {
                         mint: trade_info.clone().mint,
-                        volume: initial_volume,
                         buy_price: 0_u64,
                         sell_price: 0_u64,
-                        txn_num: initial_txn_num,
                         status: Status::Buying,
                         timestamp: None,
                     };
@@ -400,9 +386,14 @@ pub async fn new_token_trader_pumpfun(
                     let mint_str = trade_info.mint.clone();
                     let existing_liquidity_pools_clone = Arc::clone(&existing_liquidity_pools);
                     logger_clone.log(
-                        format!("[BUILD-IXN]({}) - {} :: {:?}", mint_str.clone(), Utc::now(), start_time.elapsed())
-                            .yellow()
-                            .to_string(),
+                        format!(
+                            "[BUILD-IXN]({}) - {} :: {:?}",
+                            mint_str.clone(),
+                            Utc::now(),
+                            start_time.elapsed()
+                        )
+                        .yellow()
+                        .to_string(),
                     );
 
                     counter += 1;
@@ -419,9 +410,14 @@ pub async fn new_token_trader_pumpfun(
                                 let (client, keypair, instructions, sol_amount) =
                                     (result.0, result.1, result.2, result.3);
                                 logger_clone.log(
-                                    format!("[CONFIRM-TXN]({}) - {} :: {:?}", mint_str.clone(), Utc::now(), start_time.elapsed())
-                                        .yellow()
-                                        .to_string(),
+                                    format!(
+                                        "[CONFIRM-TXN]({}) - {} :: {:?}",
+                                        mint_str.clone(),
+                                        Utc::now(),
+                                        start_time.elapsed()
+                                    )
+                                    .yellow()
+                                    .to_string(),
                                 );
 
                                 match tx::new_signed_and_send(
@@ -435,10 +431,8 @@ pub async fn new_token_trader_pumpfun(
                                     Ok(res) => {
                                         let bought_pool = LiquidityPool {
                                             mint: mint_str.clone(),
-                                            volume: initial_volume + volume_change,
                                             buy_price: sol_amount,
                                             sell_price: 0_u64,
-                                            txn_num: initial_txn_num + txn_num_change,
                                             status: Status::Bought,
                                             timestamp: Some(Instant::now()),
                                         };
@@ -460,10 +454,8 @@ pub async fn new_token_trader_pumpfun(
                                         );
                                         let failed_pool = LiquidityPool {
                                             mint: mint_str.clone(),
-                                            volume: initial_volume,
                                             buy_price: 0_u64,
                                             sell_price: 0_u64,
-                                            txn_num: initial_txn_num,
                                             status: Status::Failure,
                                             timestamp: None,
                                         };
@@ -483,10 +475,8 @@ pub async fn new_token_trader_pumpfun(
                                 );
                                 let failed_pool = LiquidityPool {
                                     mint: mint_str.clone(),
-                                    volume: initial_volume,
                                     buy_price: 0_u64,
                                     sell_price: 0_u64,
-                                    txn_num: initial_txn_num,
                                     status: Status::Failure,
                                     timestamp: None,
                                 };
@@ -511,22 +501,30 @@ pub async fn new_token_trader_pumpfun(
                             // Sync `volume` 'n `txn_num` | Update `timestamp`
                             // Check `volume_change`
                             // --------------------
-                            if trade_info.volume_change == 0 {
-                                continue;
-                            }
+                            logger.log(format!("[VOLUME-CHECK]({}) => {}", trade_info.mint, trade_info.volume_change));
                             // Update into ...ing status
                             // --------------------
-                            let check_pool = LiquidityPool {
-                                mint: existing_pool.clone().mint,
-                                volume: existing_pool.volume + trade_info.volume_change,
-                                buy_price: existing_pool.buy_price,
-                                sell_price: 0_u64,
-                                txn_num: existing_pool.txn_num + 1_u64,
-                                status: Status::Checking,
-                                timestamp: Some(Instant::now()),
-                            };
-                            existing_pools.retain(|pool| pool.mint != existing_pool.clone().mint);
-                            existing_pools.insert(check_pool.clone());
+                            if trade_info.volume_change <= 0 {
+                                let check_pool = LiquidityPool {
+                                    mint: existing_pool.clone().mint,
+                                    buy_price: existing_pool.buy_price,
+                                    sell_price: 0_u64,
+                                    status: Status::Checking,
+                                    timestamp: existing_pool.timestamp,
+                                };
+                                existing_pools.retain(|pool| pool.mint != existing_pool.clone().mint);
+                                existing_pools.insert(check_pool.clone());
+                            } else {
+                                let check_pool = LiquidityPool {
+                                    mint: existing_pool.clone().mint,
+                                    buy_price: existing_pool.buy_price,
+                                    sell_price: 0_u64,
+                                    status: Status::Checking,
+                                    timestamp: Some(Instant::now()),
+                                };
+                                existing_pools.retain(|pool| pool.mint != existing_pool.clone().mint);
+                                existing_pools.insert(check_pool.clone());
+                            }
 
                             // CHECK|SELL TOKEN: BY PT/SL
                             // -------------------
@@ -535,7 +533,6 @@ pub async fn new_token_trader_pumpfun(
                             let swap_config_clone = swap_config.clone();
                             let mint_str = existing_pool.clone().mint;
                             let existing_pool_clone = existing_pool.clone();
-                            let volume_change_clone = trade_info.volume_change;
                             let existing_liquidity_pools_clone =
                                 Arc::clone(&existing_liquidity_pools);
                             let task = tokio::spawn(async move {
@@ -556,6 +553,7 @@ pub async fn new_token_trader_pumpfun(
                                             (result.0, result.1, result.2, result.3);
                                         let profit_rate =
                                             (sol_amount / existing_pool_clone.buy_price) as f64;
+                                        logger_clone.log(format!("[TP/SL-CHECK]:{} => {} :: {}", profit_rate, sol_amount, existing_pool_clone.buy_price));
                                         if profit_rate >= take_profit || profit_rate <= stop_loss {
                                             // Send Instructions and Confirm
                                             // -------------------
@@ -570,12 +568,8 @@ pub async fn new_token_trader_pumpfun(
                                                 Ok(res) => {
                                                     let sold_pool = LiquidityPool {
                                                         mint: mint_str.clone(),
-                                                        volume: existing_pool_clone.volume
-                                                            + volume_change_clone,
                                                         buy_price: existing_pool_clone.buy_price,
                                                         sell_price: sol_amount,
-                                                        txn_num: existing_pool_clone.txn_num
-                                                            + 1_u64,
                                                         status: Status::Sold,
                                                         timestamp: Some(Instant::now()),
                                                     };
@@ -604,12 +598,9 @@ pub async fn new_token_trader_pumpfun(
                                                     );
                                                     let bought_pool = LiquidityPool {
                                                         mint: mint_str.clone(),
-                                                        volume: existing_pool_clone.volume,
                                                         buy_price: existing_pool_clone.buy_price,
                                                         sell_price: existing_pool_clone.sell_price,
-                                                        txn_num: existing_pool_clone.txn_num
-                                                            + 1_u64,
-                                                        status: existing_pool_clone.status,
+                                                        status: Status::Bought,
                                                         timestamp: existing_pool_clone.timestamp,
                                                     };
                                                     let mut update_pools =
@@ -621,11 +612,40 @@ pub async fn new_token_trader_pumpfun(
                                                     update_pools.insert(bought_pool.clone());
                                                 }
                                             };
+                                        } else {
+                                            let bought_pool = LiquidityPool {
+                                                mint: mint_str.clone(),
+                                                buy_price: existing_pool_clone.buy_price,
+                                                sell_price: existing_pool_clone.sell_price,
+                                                status: Status::Bought,
+                                                timestamp: existing_pool_clone.timestamp,
+                                            };
+                                            let mut update_pools =
+                                                existing_liquidity_pools_clone
+                                                    .lock()
+                                                    .unwrap();
+                                            update_pools
+                                                .retain(|pool| pool.mint != mint_str);
+                                            update_pools.insert(bought_pool.clone());
                                         }
                                     }
                                     Err(_) => {
                                         // Skip checking TP/SL
                                         // -------------------
+                                        let bought_pool = LiquidityPool {
+                                            mint: mint_str.clone(),
+                                            buy_price: existing_pool_clone.buy_price,
+                                            sell_price: existing_pool_clone.sell_price,
+                                            status: Status::Bought,
+                                            timestamp: existing_pool_clone.timestamp,
+                                        };
+                                        let mut update_pools =
+                                            existing_liquidity_pools_clone
+                                                .lock()
+                                                .unwrap();
+                                        update_pools
+                                            .retain(|pool| pool.mint != mint_str);
+                                        update_pools.insert(bought_pool.clone());
                                     }
                                 };
                             });

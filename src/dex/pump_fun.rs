@@ -66,7 +66,7 @@ impl Pump {
         swap_config: SwapConfig,
         start_time: Instant,
     ) -> Result<(Arc<RpcClient>, Arc<Keypair>, Vec<Instruction>, u64)> {
-        let logger = Logger::new(format!("[PUMPFUN-SWAP-BY-MINT] => ").blue().to_string());
+        let logger = Logger::new("[PUMPFUN-SWAP-BY-MINT] => ".blue().to_string());
         logger.log(
             format!(
                 "[SWAP-BEGIN]({}) - {} :: ({:?})",

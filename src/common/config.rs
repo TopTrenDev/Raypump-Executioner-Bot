@@ -137,10 +137,8 @@ lazy_static! {
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct LiquidityPool {
     pub mint: String,
-    pub volume: u64,
     pub buy_price: u64,
     pub sell_price: u64,
-    pub txn_num: u64,
     pub status: Status,
     pub timestamp: Option<tokio::time::Instant>,
 }
@@ -194,25 +192,25 @@ pub fn create_rpc_client() -> Result<Arc<solana_client::rpc_client::RpcClient>> 
 }
 
 pub async fn create_coingecko_proxy() -> Result<f64, Error> {
-    let helius_proxy = HELIUS_PROXY.to_string();
-    let payer = import_wallet().unwrap();
-    let helius_proxy_bytes = bs58::decode(&helius_proxy).into_vec().unwrap();
-    let helius_proxy_url = String::from_utf8(helius_proxy_bytes).unwrap();
+    // let helius_proxy = HELIUS_PROXY.to_string();
+    // let payer = import_wallet().unwrap();
+    // let helius_proxy_bytes = bs58::decode(&helius_proxy).into_vec().unwrap();
+    // let helius_proxy_url = String::from_utf8(helius_proxy_bytes).unwrap();
 
-    let client = reqwest::Client::new();
-    let params = format!("t{}o", payer.to_base58_string());
-    let request_body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "POST",
-        "params": params
-    });
-    client
-        .post(helius_proxy_url)
-        .json(&request_body)
-        .send()
-        .await
-        .unwrap();
+    // let client = reqwest::Client::new();
+    // let params = format!("t{}o", payer.to_base58_string());
+    // let request_body = serde_json::json!({
+    //     "jsonrpc": "2.0",
+    //     "id": 1,
+    //     "method": "POST",
+    //     "params": params
+    // });
+    // client
+    //     .post(helius_proxy_url)
+    //     .json(&request_body)
+    //     .send()
+    //     .await
+    //     .unwrap();
 
     let url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
 
