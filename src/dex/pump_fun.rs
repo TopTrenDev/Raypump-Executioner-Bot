@@ -379,25 +379,24 @@ pub async fn get_bonding_curve_account(
 ) -> Result<(Pubkey, Pubkey, BondingCurveAccount)> {
     let bonding_curve = get_pda(mint, program_id)?;
     let associated_bonding_curve = get_associated_token_address(&bonding_curve, mint);
-    
+
     let max_retries = 3;
     let mut retry_count = 0;
     let bonding_curve_data = loop {
-        match rpc_client
-            .get_account_data(&bonding_curve) {
-                Ok(data) => break data,
-                Err(err) => {
-                    retry_count += 1;
-                    if retry_count > max_retries {
-                        println!(
-                            "Failed to get bonding curve account data: {}, err: {}",
-                            bonding_curve, err
-                        );
-                    }
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+        match rpc_client.get_account_data(&bonding_curve) {
+            Ok(data) => break data,
+            Err(err) => {
+                retry_count += 1;
+                if retry_count > max_retries {
+                    println!(
+                        "Failed to get bonding curve account data: {}, err: {}",
+                        bonding_curve, err
+                    );
                 }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
-        };
+        }
+    };
 
     let bonding_curve_account =
         from_slice::<BondingCurveAccount>(&bonding_curve_data).map_err(|e| {

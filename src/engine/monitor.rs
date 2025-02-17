@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::{collections::HashSet, time::Duration};
 
+use crate::common::blacklist::Blacklist;
 use crate::common::{
     config::{AppState, LiquidityPool, Status, SwapConfig, PUMP_LOG_INSTRUCTION, SUBSCRIPTION_MSG},
     logger::Logger,
@@ -280,6 +281,7 @@ pub async fn new_token_trader_pumpfun(
     time_exceed: u64,
     take_profit: f64,
     stop_loss: f64,
+    _blacklist: Blacklist,
 ) {
     // INITIAL SETTING FOR SUBSCIBE
     // -----------------------------------------------------------------------------------------------------------------------------

@@ -19,6 +19,7 @@ async fn main() {
         config.time_exceed,
         config.take_profit,
         config.stop_loss,
+        config.blacklist,
     )
     .await;
 }

