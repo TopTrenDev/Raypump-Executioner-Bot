@@ -133,18 +133,11 @@ pub async fn pumpfun_autosell_monitor(
             .yellow()
             .to_string(),
     );
-    logger.log(format!("\n{:#?}", existing_pools));
     for existing_pool in existing_pools.clone().iter() {
         let timeout = Duration::from_secs(time_exceed);
         let start_time = Instant::now();
         if existing_pool.status == Status::Bought {
             if let Some(timestamp) = existing_pool.timestamp {
-                logger.log(format!(
-                    "[TIMESTAMP-CHECK]({}) => {:?} :: {:?}",
-                    existing_pool.mint,
-                    timestamp.elapsed(),
-                    timeout
-                ));
                 if timestamp.elapsed() > timeout {
                     // Now Auto-Sell
                     // -------------
@@ -373,7 +366,7 @@ pub async fn new_token_trader_pumpfun(
                     // NOW BUY!
                     // Update into ...ing status
                     // ---------------
-                    if counter > 5 {
+                    if counter > 50 {
                         continue;
                     };
                     let buying_pool = LiquidityPool {
@@ -509,10 +502,10 @@ pub async fn new_token_trader_pumpfun(
                             // Sync `volume` 'n `txn_num` | Update `timestamp`
                             // Check `volume_change`
                             // --------------------
-                            logger.log(format!(
-                                "[VOLUME-CHECK]({}) => {}",
-                                trade_info.mint, trade_info.volume_change
-                            ));
+                            // logger.log(format!(
+                            //     "[VOLUME-CHECK]({}) => {}",
+                            //     trade_info.mint, trade_info.volume_change
+                            // ));
                             // Update into ...ing status
                             // --------------------
                             if trade_info.volume_change <= 0 {

@@ -202,15 +202,6 @@ impl Pump {
         let token_price: f64 =
             (virtual_sol_reserves.as_u128() as f64) / (virtual_token_reserves.as_u128() as f64);
 
-        logger.log(format!(
-            "[TP/SL]({}) => v_sol_reserve: {} :: v_token_reserve: {}",
-            mint_str, virtual_sol_reserves, virtual_token_reserves
-        ));
-        logger.log(format!(
-            "[TOKEN_PRICE]({}) => token_price: {} :: amount_specified: {}",
-            mint_str, token_price, amount_specified
-        ));
-
         let (token_amount, sol_amount_threshold, input_accouts) = match swap_config.swap_direction {
             SwapDirection::Buy => {
                 let max_sol_cost = max_amount_with_slippage(amount_specified, slippage_bps);
@@ -388,10 +379,11 @@ pub async fn get_bonding_curve_account(
             Err(err) => {
                 retry_count += 1;
                 if retry_count > max_retries {
-                    println!(
-                        "Failed to get bonding curve account data: {}, err: {}",
-                        bonding_curve, err
-                    );
+                    return Err(anyhow!(
+                        "Failed to get bonding curve account data after {} retries: {}",
+                        max_retries,
+                        err
+                    ));
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
