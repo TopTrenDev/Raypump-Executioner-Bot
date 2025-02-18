@@ -95,22 +95,19 @@ impl Pump {
         // RPC requests
         // ---------------------------------------------------
         let nonblocking_clinet_clone = self.rpc_nonblocking_client.clone();
-        let handle1 = tokio::spawn(get_bonding_curve_account(
+        let bonding_curve_handle = tokio::spawn(get_bonding_curve_account(
             self.rpc_client.clone().unwrap(),
             mint,
             pump_program,
         ));
-        let handle2 =
+        let blockhash_handle =
             tokio::spawn(async move { nonblocking_clinet_clone.get_latest_blockhash().await });
-        // let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
-        //     get_bonding_curve_account(self.rpc_client.clone().unwrap(), &mint, &pump_program)
-        //         .await?;
         let ((bonding_curve, associated_bonding_curve, bonding_curve_account), recent_blockhash) =
-            match tokio::try_join!(handle1, handle2) {
-                Ok((result1, result2)) => {
-                    let result1 = result1.expect("Task 1 panicked");
-                    let result2 = result2.expect("Task 2 panicked");
-                    (result1, result2)
+            match tokio::try_join!(bonding_curve_handle, blockhash_handle) {
+                Ok((bonding_curve_result, blockhash_result)) => {
+                    let bonding_curve_result = bonding_curve_result.expect("Task 1 panicked");
+                    let blockhash_result = blockhash_result.expect("Task 2 panicked");
+                    (bonding_curve_result, blockhash_result)
                 }
                 Err(err) => {
                     logger.log(format!("Failed with {}, ", err).red().to_string());
@@ -142,9 +139,8 @@ impl Pump {
                 // ----------------------------
                 match token::get_account_info(
                     self.rpc_nonblocking_client.clone(),
-                    &token_out,
-                    &out_ata,
-                    &logger,
+                    token_out,
+                    out_ata,
                 )
                 .await
                 {
@@ -173,19 +169,28 @@ impl Pump {
                 )
             }
             SwapDirection::Sell => {
-                let in_account = token::get_account_info(
+                let in_account_handle = tokio::spawn(token::get_account_info(
                     self.rpc_nonblocking_client.clone(),
-                    &token_in,
-                    &in_ata,
-                    &logger,
-                )
-                .await?;
-                let in_mint = token::get_mint_info(
+                    token_in,
+                    in_ata,
+                ));
+                let in_mint_handle = tokio::spawn(token::get_mint_info(
                     self.rpc_nonblocking_client.clone(),
                     self.keypair.clone(),
-                    &token_in,
-                )
-                .await?;
+                    token_in,
+                ));
+                let (in_account, in_mint) =
+                    match tokio::try_join!(in_account_handle, in_mint_handle) {
+                        Ok((in_account_result, in_mint_result)) => {
+                            let in_account_result = in_account_result.expect("Task 1 panicked");
+                            let in_mint_result = in_mint_result.expect("Task 2 panicked");
+                            (in_account_result, in_mint_result)
+                        }
+                        Err(err) => {
+                            logger.log(format!("Failed with {}, ", err).red().to_string());
+                            return Err(anyhow!(format!("{}", err)));
+                        }
+                    };
                 let amount = match swap_config.in_type {
                     SwapInType::Qty => {
                         ui_amount_to_amount(swap_config.amount_in, in_mint.base.decimals)
