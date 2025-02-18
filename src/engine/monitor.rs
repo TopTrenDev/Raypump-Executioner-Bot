@@ -190,10 +190,10 @@ pub async fn pumpfun_autosell_monitor(
                             Ok(result) => {
                                 // Send Instructions and Confirm
                                 // -------------------
-                                let (client, keypair, instructions, token_price) =
+                                let (recent_blockhash, keypair, instructions, token_price) =
                                     (result.0, result.1, result.2, result.3);
                                 match tx::new_signed_and_send(
-                                    &client,
+                                    recent_blockhash,
                                     &keypair,
                                     instructions,
                                     &logger_clone,
@@ -408,7 +408,7 @@ pub async fn new_token_trader_pumpfun(
                             Ok(result) => {
                                 // Send Instructions and Confirm
                                 // -------------------
-                                let (client, keypair, instructions, token_price) =
+                                let (recent_blockhash, keypair, instructions, token_price) =
                                     (result.0, result.1, result.2, result.3);
                                 logger_clone.log(
                                     format!(
@@ -422,7 +422,7 @@ pub async fn new_token_trader_pumpfun(
                                 );
 
                                 match tx::new_signed_and_send(
-                                    &client,
+                                    recent_blockhash,
                                     &keypair,
                                     instructions,
                                     &logger_clone,
@@ -555,7 +555,7 @@ pub async fn new_token_trader_pumpfun(
                                     Ok(result) => {
                                         // Check TP/SL
                                         // -------------------
-                                        let (client, keypair, instructions, token_price) =
+                                        let (recent_blockhash, keypair, instructions, token_price) =
                                             (result.0, result.1, result.2, result.3);
                                         let profit_rate =
                                             token_price / existing_pool_clone.buy_price;
@@ -567,7 +567,7 @@ pub async fn new_token_trader_pumpfun(
                                             // Send Instructions and Confirm
                                             // -------------------
                                             match tx::new_signed_and_send(
-                                                &client,
+                                                recent_blockhash,
                                                 &keypair,
                                                 instructions,
                                                 &logger_clone,

@@ -1,13 +1,12 @@
 use std::{str::FromStr, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use borsh::from_slice;
 use borsh_derive::{BorshDeserialize, BorshSerialize};
 use chrono::Utc;
 use colored::Colorize;
 use raydium_amm::math::U128;
 use serde::{Deserialize, Serialize};
-use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -65,7 +64,7 @@ impl Pump {
         mint_str: &str,
         swap_config: SwapConfig,
         start_time: Instant,
-    ) -> Result<(Arc<RpcClient>, Arc<Keypair>, Vec<Instruction>, f64)> {
+    ) -> Result<(solana_sdk::hash::Hash, Arc<Keypair>, Vec<Instruction>, f64)> {
         let logger = Logger::new("[PUMPFUN-SWAP-BY-MINT] => ".blue().to_string());
         logger.log(
             format!(
@@ -95,9 +94,29 @@ impl Pump {
 
         // RPC requests
         // ---------------------------------------------------
-        let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
-            get_bonding_curve_account(self.rpc_client.clone().unwrap(), &mint, &pump_program)
-                .await?;
+        let nonblocking_clinet_clone = self.rpc_nonblocking_client.clone();
+        let handle1 = tokio::spawn(get_bonding_curve_account(
+            self.rpc_client.clone().unwrap(),
+            mint,
+            pump_program,
+        ));
+        let handle2 =
+            tokio::spawn(async move { nonblocking_clinet_clone.get_latest_blockhash().await });
+        // let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
+        //     get_bonding_curve_account(self.rpc_client.clone().unwrap(), &mint, &pump_program)
+        //         .await?;
+        let ((bonding_curve, associated_bonding_curve, bonding_curve_account), recent_blockhash) =
+            match tokio::try_join!(handle1, handle2) {
+                Ok((result1, result2)) => {
+                    let result1 = result1.expect("Task 1 panicked");
+                    let result2 = result2.expect("Task 2 panicked");
+                    (result1, result2)
+                }
+                Err(err) => {
+                    logger.log(format!("Failed with {}, ", err).red().to_string());
+                    return Err(anyhow!(format!("{}", err)));
+                }
+            };
 
         // Calculate tokens out
         let virtual_sol_reserves = U128::from(bonding_curve_account.virtual_sol_reserves);
@@ -308,14 +327,14 @@ impl Pump {
                 .to_string()));
         }
 
-        let client = self
-            .rpc_client
-            .clone()
-            .context("Failed to get rpc client")?;
-
         // Return- (instructions, token_price)
         // --------------------
-        Ok((client, self.keypair.clone(), instructions, token_price))
+        Ok((
+            recent_blockhash,
+            self.keypair.clone(),
+            instructions,
+            token_price,
+        ))
     }
 }
 
@@ -365,11 +384,11 @@ pub struct BondingCurveAccount {
 
 pub async fn get_bonding_curve_account(
     rpc_client: Arc<solana_client::rpc_client::RpcClient>,
-    mint: &Pubkey,
-    program_id: &Pubkey,
+    mint: Pubkey,
+    program_id: Pubkey,
 ) -> Result<(Pubkey, Pubkey, BondingCurveAccount)> {
-    let bonding_curve = get_pda(mint, program_id)?;
-    let associated_bonding_curve = get_associated_token_address(&bonding_curve, mint);
+    let bonding_curve = get_pda(&mint, &program_id)?;
+    let associated_bonding_curve = get_associated_token_address(&bonding_curve, &mint);
 
     let max_retries = 3;
     let mut retry_count = 0;
@@ -412,25 +431,25 @@ pub fn get_pda(mint: &Pubkey, program_id: &Pubkey) -> Result<Pubkey> {
 }
 
 // https://frontend-api.pump.fun/coins/8zSLdDzM1XsqnfrHmHvA9ir6pvYDjs8UXz6B2Tydd6b2
-pub async fn get_pump_info(
-    rpc_client: Arc<solana_client::rpc_client::RpcClient>,
-    mint: &str,
-) -> Result<PumpInfo> {
-    let mint = Pubkey::from_str(mint)?;
-    let program_id = Pubkey::from_str(PUMP_PROGRAM)?;
-    let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
-        get_bonding_curve_account(rpc_client, &mint, &program_id).await?;
+// pub async fn get_pump_info(
+//     rpc_client: Arc<solana_client::rpc_client::RpcClient>,
+//     mint: str,
+// ) -> Result<PumpInfo> {
+//     let mint = Pubkey::from_str(&mint)?;
+//     let program_id = Pubkey::from_str(PUMP_PROGRAM)?;
+//     let (bonding_curve, associated_bonding_curve, bonding_curve_account) =
+//         get_bonding_curve_account(rpc_client, &mint, &program_id).await?;
 
-    let pump_info = PumpInfo {
-        mint: mint.to_string(),
-        bonding_curve: bonding_curve.to_string(),
-        associated_bonding_curve: associated_bonding_curve.to_string(),
-        raydium_pool: None,
-        raydium_info: None,
-        complete: bonding_curve_account.complete,
-        virtual_sol_reserves: bonding_curve_account.virtual_sol_reserves,
-        virtual_token_reserves: bonding_curve_account.virtual_token_reserves,
-        total_supply: bonding_curve_account.token_total_supply,
-    };
-    Ok(pump_info)
-}
+//     let pump_info = PumpInfo {
+//         mint: mint.to_string(),
+//         bonding_curve: bonding_curve.to_string(),
+//         associated_bonding_curve: associated_bonding_curve.to_string(),
+//         raydium_pool: None,
+//         raydium_info: None,
+//         complete: bonding_curve_account.complete,
+//         virtual_sol_reserves: bonding_curve_account.virtual_sol_reserves,
+//         virtual_token_reserves: bonding_curve_account.virtual_token_reserves,
+//         total_supply: bonding_curve_account.token_total_supply,
+//     };
+//     Ok(pump_info)
+// }

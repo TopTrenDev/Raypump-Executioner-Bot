@@ -105,7 +105,7 @@ pub async fn jito_confirm(
 }
 
 pub async fn new_signed_and_send(
-    client: &RpcClient,
+    recent_blockhash: solana_sdk::hash::Hash,
     keypair: &Keypair,
     mut instructions: Vec<Instruction>,
     logger: &Logger,
@@ -132,7 +132,6 @@ pub async fn new_signed_and_send(
     }
 
     // send init tx
-    let recent_blockhash = client.get_latest_blockhash()?;
     let txn = Transaction::new_signed_with_payer(
         &instructions,
         Some(&keypair.pubkey()),
