@@ -1,13 +1,13 @@
-use std::{future::Future, str::FromStr, sync::LazyLock, time::Duration};
-
-use crate::common::utils::import_env_var;
 use anyhow::{anyhow, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::{seq::IteratorRandom, thread_rng};
 use serde::Deserialize;
 use serde_json::Value;
 use solana_sdk::pubkey::Pubkey;
+use std::{future::Future, str::FromStr, sync::LazyLock, time::Duration};
 use tokio::time::{sleep, Instant};
+
+use crate::common::config::import_env_var;
 
 pub static BLOCK_ENGINE_URL: LazyLock<String> =
     LazyLock::new(|| import_env_var("JITO_BLOCK_ENGINE_URL"));

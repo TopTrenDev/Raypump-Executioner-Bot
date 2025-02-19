@@ -9,8 +9,6 @@ use spl_token_client::{
 };
 use std::sync::Arc;
 
-use crate::common::logger::Logger;
-
 pub fn get_associated_token_address(
     client: Arc<solana_client::nonblocking::rpc_client::RpcClient>,
     keypair: Arc<Keypair>,
@@ -32,31 +30,30 @@ pub fn get_associated_token_address(
 
 pub async fn get_account_info(
     client: Arc<solana_client::nonblocking::rpc_client::RpcClient>,
-    address: &Pubkey,
-    account: &Pubkey,
-    logger: &Logger,
+    address: Pubkey,
+    account: Pubkey,
 ) -> TokenResult<StateWithExtensionsOwned<Account>> {
     let program_client = Arc::new(ProgramRpcClient::new(
         client.clone(),
         ProgramRpcClientSendTransaction,
     ));
     let account = program_client
-        .get_account(*account)
+        .get_account(account)
         .await
         .map_err(TokenError::Client)?
         .ok_or(TokenError::AccountNotFound)
-        .inspect_err(|err| {
-            logger.log(format!(
-                "get_account_info: {} {}: mint {}",
-                account, err, address
-            ));
+        .inspect_err(|_err| {
+            // logger.log(format!(
+            //     "get_account_info: {} {}: mint {}",
+            //     account, err, address
+            // ));
         })?;
 
     if account.owner != spl_token::ID {
         return Err(TokenError::AccountInvalidOwner);
     }
     let account = StateWithExtensionsOwned::<Account>::unpack(account.data)?;
-    if account.base.mint != *address {
+    if account.base.mint != address {
         return Err(TokenError::AccountInvalidMint);
     }
 
@@ -66,14 +63,14 @@ pub async fn get_account_info(
 pub async fn get_mint_info(
     client: Arc<solana_client::nonblocking::rpc_client::RpcClient>,
     _keypair: Arc<Keypair>,
-    address: &Pubkey,
+    address: Pubkey,
 ) -> TokenResult<StateWithExtensionsOwned<Mint>> {
     let program_client = Arc::new(ProgramRpcClient::new(
         client.clone(),
         ProgramRpcClientSendTransaction,
     ));
     let account = program_client
-        .get_account(*address)
+        .get_account(address)
         .await
         .map_err(TokenError::Client)?
         .ok_or(TokenError::AccountNotFound)
