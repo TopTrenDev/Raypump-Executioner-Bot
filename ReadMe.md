@@ -55,11 +55,11 @@ make stop
 
 ## **📬 Contact & Community**
 
+📢 **Twitter:** [toptrendev](https://x.com/toptrendev)
+
 📢 **Discord:** [toptrendev](https://discord.com/users/648385188774019072)
 
-📢 **Twitter:** [toptrendev](https://x.com/toptrendev) 
-
-📢 **Telegram:** [@toptrendev](https://t.me/toptrendev)  
+📢 **Telegram:** [@toptrendev](https://t.me/toptrendev_146)
 
 
 
